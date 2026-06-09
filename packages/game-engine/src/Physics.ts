@@ -12,11 +12,8 @@ export interface KartState {
   angularVel: number;
   speed: number;        // pixels/second
   isDrifting: boolean;
-  driftCharge: number;  // 0–1, for mini-turbo
   isGrounded: boolean;
   surfaceType: SurfaceType;
-  spinTimer: number;    // >0 = knocked out
-  boostTimer: number;   // >0 = boosting
 }
 
 export type SurfaceType = "road" | "dirt" | "grass" | "boost" | "mud";
@@ -26,11 +23,11 @@ export const SURFACE_PARAMS: Record<SurfaceType, {
   maxSpeed: number;
   acceleration: number;
 }> = {
-  road:  { friction: 0.935, maxSpeed: 520, acceleration: 820 },
-  dirt:  { friction: 0.855, maxSpeed: 360, acceleration: 520 },
-  grass: { friction: 0.780, maxSpeed: 260, acceleration: 380 },
-  boost: { friction: 0.985, maxSpeed: 900, acceleration: 1400 },
-  mud:   { friction: 0.600, maxSpeed: 160, acceleration: 240 },
+  road:  { friction: 0.92, maxSpeed: 520, acceleration: 800 },
+  dirt:  { friction: 0.85, maxSpeed: 360, acceleration: 520 },
+  grass: { friction: 0.78, maxSpeed: 280, acceleration: 400 },
+  boost: { friction: 0.98, maxSpeed: 820, acceleration: 1200 },
+  mud:   { friction: 0.60, maxSpeed: 180, acceleration: 260 },
 };
 
 export interface KartInput {
@@ -41,113 +38,72 @@ export interface KartInput {
   drift: boolean;
 }
 
-const MAX_ANGULAR_VEL    = 3.4;
-const TURN_SPEED         = 2.8;
-const DRIFT_TURN_MULT    = 1.6;
-const DRIFT_SPEED_MULT   = 0.87;
-const BRAKE_FORCE        = 1600;
-const SPIN_DURATION      = 1.2;  // seconds
-const SPIN_ANGULAR_VEL   = 12.0;
-const MINI_TURBO_SPEED   = 750;
-const MINI_TURBO_DURATION = 0.8;
-const DRIFT_CHARGE_RATE  = 0.9;
+const MAX_ANGULAR_VEL = 3.2;
+const TURN_SPEED = 2.6;
+const DRIFT_TURN_MULTIPLIER = 1.5;
+const DRIFT_SPEED_PENALTY = 0.88;
+const BRAKE_FORCE = 1400;
+const GRAVITY = 0; // top-down
 
 export function stepKartPhysics(
   state: KartState,
   input: KartInput,
-  dt: number,
+  dt: number,           // seconds
   surfaceType: SurfaceType = "road"
 ): KartState {
   const params = SURFACE_PARAMS[surfaceType];
-  const s: KartState = {
-    ...state,
-    velocity:  { ...state.velocity },
-    position:  { ...state.position },
-  };
+  const s = { ...state, velocity: { ...state.velocity }, position: { ...state.position } };
 
-  // ── Spin-out (knocked by item) ────────────────────────────────────────────
-  if (s.spinTimer > 0) {
-    s.spinTimer -= dt;
-    s.angle += SPIN_ANGULAR_VEL * dt;
-    s.speed *= 0.92;
-    s.position.x += Math.cos(s.angle) * s.speed * dt;
-    s.position.y += Math.sin(s.angle) * s.speed * dt;
-    return s;
-  }
-
-  // ── Boost timer ───────────────────────────────────────────────────────────
-  if (s.boostTimer > 0) {
-    s.boostTimer -= dt;
-  }
-  const effectiveMaxSpeed = s.boostTimer > 0
-    ? Math.max(params.maxSpeed, MINI_TURBO_SPEED)
-    : params.maxSpeed;
-
-  // ── Steering ──────────────────────────────────────────────────────────────
+  // ── Steering ─────────────────────────────────────────────────────────────
   const turnDir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  const speedFactor = Math.min(Math.abs(s.speed) / 280, 1);
-  const driftMult = s.isDrifting ? DRIFT_TURN_MULT : 1.0;
-  s.angularVel += TURN_SPEED * turnDir * speedFactor * driftMult * dt;
-  s.angularVel *= 0.72;
+  const speedFactor = Math.min(s.speed / 300, 1);
+  const turnAmount = TURN_SPEED * turnDir * speedFactor * dt;
+  const driftMult = s.isDrifting ? DRIFT_TURN_MULTIPLIER : 1;
+
+  s.angularVel += turnAmount * driftMult;
+  s.angularVel *= 0.75; // angular damping
   s.angularVel = Math.max(-MAX_ANGULAR_VEL, Math.min(MAX_ANGULAR_VEL, s.angularVel));
   s.angle += s.angularVel * dt;
 
-  // ── Drift charge ─────────────────────────────────────────────────────────
-  if (s.isDrifting && Math.abs(turnDir) > 0) {
-    s.driftCharge = Math.min(1, s.driftCharge + DRIFT_CHARGE_RATE * dt);
-  } else if (!s.isDrifting && state.isDrifting && s.driftCharge > 0.5) {
-    // Mini-turbo release
-    s.boostTimer = MINI_TURBO_DURATION;
-    s.driftCharge = 0;
-  } else if (!s.isDrifting) {
-    s.driftCharge = Math.max(0, s.driftCharge - dt * 2);
-  }
-
   // ── Acceleration / braking ────────────────────────────────────────────────
   let accelForce = 0;
-  if (input.up)   accelForce =  (s.boostTimer > 0 ? params.acceleration * 1.5 : params.acceleration);
+  if (input.up)   accelForce =  params.acceleration;
   if (input.down) accelForce = -BRAKE_FORCE;
 
   s.speed += accelForce * dt;
-  if (s.isDrifting) s.speed *= DRIFT_SPEED_MULT;
 
+  // Drift speed penalty
+  if (s.isDrifting) s.speed *= DRIFT_SPEED_PENALTY;
+
+  // Friction + max speed clamp
   s.speed *= params.friction;
-  s.speed = Math.max(-effectiveMaxSpeed * 0.35, Math.min(effectiveMaxSpeed, s.speed));
+  s.speed = Math.max(-params.maxSpeed * 0.4, Math.min(params.maxSpeed, s.speed));
 
-  // ── Velocity → position ───────────────────────────────────────────────────
+  // ── Velocity from speed + angle ──────────────────────────────────────────
   s.velocity.x = Math.cos(s.angle) * s.speed;
   s.velocity.y = Math.sin(s.angle) * s.speed;
+
+  // ── Position integration ─────────────────────────────────────────────────
   s.position.x += s.velocity.x * dt;
   s.position.y += s.velocity.y * dt;
 
-  // ── Drift state ───────────────────────────────────────────────────────────
-  s.isDrifting = input.drift && s.speed > 180 && Math.abs(turnDir) > 0;
+  // ── Drift state ──────────────────────────────────────────────────────────
+  s.isDrifting = input.drift && s.speed > 200 && Math.abs(turnDir) > 0;
   s.surfaceType = surfaceType;
 
   return s;
 }
 
-export function applySpinOut(state: KartState): KartState {
-  return { ...state, spinTimer: SPIN_DURATION, speed: state.speed * 0.4 };
-}
-
-export function applyBoost(state: KartState, durationSeconds: number): KartState {
-  return { ...state, boostTimer: durationSeconds };
-}
-
 export function createKartState(x: number, y: number, angle = 0): KartState {
   return {
-    position:   { x, y },
-    velocity:   { x: 0, y: 0 },
+    position: { x, y },
+    velocity: { x: 0, y: 0 },
     angle,
     angularVel: 0,
-    speed:      0,
+    speed: 0,
     isDrifting: false,
-    driftCharge: 0,
     isGrounded: true,
     surfaceType: "road",
-    spinTimer:  0,
-    boostTimer: 0,
   };
 }
 
@@ -159,11 +115,7 @@ export function distance(a: Vec2, b: Vec2): number {
 
 export function lerpAngle(a: number, b: number, t: number): number {
   let diff = b - a;
-  while (diff >  Math.PI) diff -= Math.PI * 2;
+  while (diff > Math.PI)  diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
   return a + diff * t;
-}
-
-export function angleTo(from: Vec2, to: Vec2): number {
-  return Math.atan2(to.y - from.y, to.x - from.x);
 }

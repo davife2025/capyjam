@@ -1,12 +1,4 @@
-import {
-  stepKartPhysics,
-  createKartState,
-  applySpinOut,
-  applyBoost,
-  type KartState,
-  type KartInput,
-  type SurfaceType,
-} from "./Physics";
+import { stepKartPhysics, createKartState, type KartState, type KartInput, type SurfaceType } from "./Physics";
 import type { PowerUpType, SkinId } from "@capyjam/types";
 
 export interface CapyKartConfig {
@@ -36,65 +28,68 @@ export class CapyKart {
   state: KartState;
   input: KartInput = { up: false, down: false, left: false, right: false, drift: false };
 
-  // Race tracking
-  currentLap        = 0;
-  totalLaps:          number;
-  lapTimes:           number[] = [];
-  lapData:            LapData;
-  raceStartTime       = 0;
-  finishTime:         number | null = null;
-  racePosition        = 0;
-  progressDistance    = 0; // total distance along track path (for position sorting)
+  // Race state
+  currentLap = 0;
+  totalLaps: number;
+  lapTimes: number[] = [];
+  lapData: LapData;
+  raceStartTime = 0;
+  finishTime: number | null = null;
+  position = 0; // race position (1st, 2nd, etc.)
 
   // Power-ups
-  heldPowerUp:   PowerUpType | null = null;
-  activeEffect:  PowerUpEffect | null = null;
+  heldPowerUp: PowerUpType | null = null;
+  activeEffect: PowerUpEffect | null = null;
   invincibleUntil = 0;
 
-  // Interpolation (remote players)
-  prevState:           KartState;
-  targetState:         KartState;
-  interpolationAlpha   = 0;
-  isRemote             = false;
+  // Interpolation (for remote players)
+  prevState: KartState;
+  targetState: KartState;
+  interpolationAlpha = 0;
 
   constructor(config: CapyKartConfig, totalLaps = 3) {
-    this.id        = config.id;
-    this.playerId  = config.playerId;
-    this.skin      = config.skin;
+    this.id = config.id;
+    this.playerId = config.playerId;
+    this.skin = config.skin;
     this.totalLaps = totalLaps;
-    this.state     = createKartState(config.startX, config.startY, config.startAngle);
-    this.prevState  = { ...this.state, position: { ...this.state.position }, velocity: { ...this.state.velocity } };
+    this.state = createKartState(config.startX, config.startY, config.startAngle);
+    this.prevState = { ...this.state, position: { ...this.state.position }, velocity: { ...this.state.velocity } };
     this.targetState = { ...this.state, position: { ...this.state.position }, velocity: { ...this.state.velocity } };
-    this.lapData   = { lap: 0, startTime: 0, checkpointsPassed: new Set() };
+    this.lapData = { lap: 0, startTime: 0, checkpointsPassed: new Set() };
   }
 
   update(dt: number, surfaceType: SurfaceType = "road"): void {
-    if (this.isRemote) {
-      this.interpolate(dt);
-      return;
-    }
-
-    // Tick active power-up effect
+    // Apply active effects
     if (this.activeEffect) {
       this.activeEffect.remainingMs -= dt * 1000;
-      if (this.activeEffect.remainingMs <= 0) this.activeEffect = null;
+      if (this.activeEffect.remainingMs <= 0) {
+        this.activeEffect = null;
+      }
     }
 
-    // Override surface for certain effects
-    let finalSurface: SurfaceType = surfaceType;
-    if (this.activeEffect?.type === "mud-splash") finalSurface = "mud";
-    if (this.activeEffect?.type === "star")       finalSurface = "boost";
+    // Mud debuff overrides surface
+    const effectiveSurface: SurfaceType =
+      this.activeEffect?.type === "mud-splash" ? "mud" : surfaceType;
+
+    // Star = boost surface
+    const finalSurface: SurfaceType =
+      this.activeEffect?.type === "star" ? "boost" : effectiveSurface;
 
     this.state = stepKartPhysics(this.state, this.input, dt, finalSurface);
   }
 
-  passCheckpoint(index: number, _total: number, _now: number): void {
-    this.lapData.checkpointsPassed.add(index);
+  passCheckpoint(checkpointIndex: number, totalCheckpoints: number, now: number): void {
+    if (this.lapData.checkpointsPassed.has(checkpointIndex)) return;
+    this.lapData.checkpointsPassed.add(checkpointIndex);
+
+    // All checkpoints passed — allow finish line
+    if (this.lapData.checkpointsPassed.size >= totalCheckpoints) {
+      // Finish line logic is handled externally
+    }
   }
 
   completeLap(now: number): boolean {
-    // Must have passed at least 1 checkpoint to prevent shortcut finish
-    if (this.lapData.checkpointsPassed.size === 0) return false;
+    if (this.lapData.checkpointsPassed.size === 0) return false; // didn't pass checkpoints
 
     const lapTime = now - (this.lapData.startTime || this.raceStartTime);
     this.lapTimes.push(lapTime);
@@ -119,77 +114,41 @@ export class CapyKart {
 
     switch (type) {
       case "speed-boost":
-        this.state = applyBoost(this.state, 2.5);
-        break;
       case "nitro":
-        this.state = applyBoost(this.state, 4.0);
+        this.activeEffect = { type, remainingMs: 3000 };
         break;
       case "star":
         this.activeEffect = { type, remainingMs: 5000 };
         this.invincibleUntil = Date.now() + 5000;
         break;
-      case "mud-splash":
-        this.activeEffect = { type, remainingMs: 3000 };
-        break;
       default:
         break;
     }
+
     return type;
-  }
-
-  hitByItem(): void {
-    if (Date.now() < this.invincibleUntil) return;
-    this.state = applySpinOut(this.state);
-    this.activeEffect = null;
-    this.invincibleUntil = Date.now() + 2000;
-  }
-
-  isSpinning(): boolean {
-    return this.state.spinTimer > 0;
-  }
-
-  isBoosting(): boolean {
-    return this.state.boostTimer > 0;
   }
 
   isFinished(): boolean {
     return this.finishTime !== null;
   }
 
-  getBestLap(): number | null {
-    if (this.lapTimes.length === 0) return null;
-    return Math.min(...this.lapTimes);
-  }
-
   getTotalRaceTime(now: number): number {
     return (this.finishTime ?? now) - this.raceStartTime;
   }
 
-  // Remote interpolation
+  // For interpolation of remote players
   receiveNetworkState(newState: KartState): void {
-    this.prevState  = { ...this.state, position: { ...this.state.position }, velocity: { ...this.state.velocity } };
+    this.prevState = { ...this.state, position: { ...this.state.position }, velocity: { ...this.state.velocity } };
     this.targetState = newState;
     this.interpolationAlpha = 0;
   }
 
-  private interpolate(dt: number): void {
-    this.interpolationAlpha = Math.min(1, this.interpolationAlpha + dt * 22);
+  interpolate(dt: number): void {
+    this.interpolationAlpha = Math.min(1, this.interpolationAlpha + dt * 20);
     const a = this.interpolationAlpha;
-    this.state.position.x = lerp(this.prevState.position.x, this.targetState.position.x, a);
-    this.state.position.y = lerp(this.prevState.position.y, this.targetState.position.y, a);
-    this.state.angle       = lerpAngleSimple(this.prevState.angle, this.targetState.angle, a);
-    this.state.speed       = lerp(this.prevState.speed, this.targetState.speed, a);
-    this.state.isDrifting  = this.targetState.isDrifting;
+    this.state.position.x = this.prevState.position.x + (this.targetState.position.x - this.prevState.position.x) * a;
+    this.state.position.y = this.prevState.position.y + (this.targetState.position.y - this.prevState.position.y) * a;
+    this.state.angle = this.prevState.angle + (this.targetState.angle - this.prevState.angle) * a;
+    this.state.speed = this.prevState.speed + (this.targetState.speed - this.prevState.speed) * a;
   }
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function lerpAngleSimple(a: number, b: number, t: number): number {
-  let diff = b - a;
-  while (diff >  Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  return a + diff * t;
 }
