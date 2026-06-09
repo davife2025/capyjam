@@ -146,3 +146,37 @@ export function createDefaultTrack(): TrackData {
     createdAt: new Date(),
   };
 }
+
+
+// ── Load track from Supabase data ─────────────────────────────────────────────
+// (Called by RaceScene when trackId is a UUID from the community)
+
+export function trackFromSupabaseRow(row: {
+  id: string;
+  name: string;
+  author_id: string | null;
+  tiles: unknown;
+  width: number;
+  height: number;
+  checkpoints: unknown;
+  start_positions: unknown;
+  plays: number;
+  rating: number;
+  created_at: string;
+  published: boolean;
+}): TrackData {
+  return {
+    id:             row.id,
+    name:           row.name,
+    authorId:       row.author_id,
+    tiles:          row.tiles as TrackTile[],
+    width:          row.width,
+    height:         row.height,
+    checkpoints:    row.checkpoints as Array<{ x: number; y: number }>,
+    startPositions: row.start_positions as Array<{ x: number; y: number; angle: number }>,
+    published:      row.published,
+    plays:          row.plays,
+    rating:         row.rating,
+    createdAt:      new Date(row.created_at),
+  };
+}
