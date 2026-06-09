@@ -5,99 +5,110 @@ import { createAIDrivers, type AIDriver } from "@/game/ai/AIDriver";
 import { CapySprite } from "@/game/objects/CapySprite";
 import { ItemBox } from "@/game/objects/ItemBox";
 import { RaceHUD } from "@/game/hud/RaceHUD";
+import { GhostCar } from "@/game/net/GhostCar";
+import { NetManager } from "@/game/net/NetManager";
 import { v4 as uuid } from "uuid";
-import type { SkinId, PowerUpType } from "@capyjam/types";
+import type { SkinId, PowerUpType, Player } from "@capyjam/types";
 import type { Vec2 } from "@capyjam/game-engine";
 
-const TOTAL_LAPS    = 3;
-const AI_COUNT      = 4;
-const CHECKPOINT_R  = 80; // pixels radius to trigger checkpoint
-const FINISH_R      = 72;
+const TOTAL_LAPS   = 3;
+const AI_COUNT     = 4;
+const CHECKPOINT_R = 80;
+const FINISH_R     = 72;
+const NET_SEND_HZ  = 20;
 
 interface Projectile {
-  type: "banana" | "shell";
-  sprite: Phaser.GameObjects.Image;
+  type:    "banana" | "shell";
+  sprite:  Phaser.GameObjects.Image;
   x: number; y: number;
-  angle: number;
-  speed: number;
+  angle:   number;
+  speed:   number;
   ownerId: string;
-  active: boolean;
+  active:  boolean;
 }
 
 export class RaceScene extends Phaser.Scene {
-  // ── Core objects ───────────────────────────────────────────────────────
-  private track!:         Track;
-  private playerKart!:    CapyKart;
-  private playerSprite!:  CapySprite;
-  private aiDrivers:      AIDriver[] = [];
-  private aiSprites:      Map<string, CapySprite> = new Map();
-  private itemBoxes:      ItemBox[] = [];
-  private projectiles:    Projectile[] = [];
-  private hud!:           RaceHUD;
+  // ── Core ────────────────────────────────────────────────────────────────
+  private track!:        Track;
+  private playerKart!:   CapyKart;
+  private playerSprite!: CapySprite;
+  private aiDrivers:     AIDriver[]                       = [];
+  private aiSprites:     Map<string, CapySprite>          = new Map();
+  private ghostCars:     Map<string, GhostCar>            = new Map();
+  private itemBoxes:     ItemBox[]                        = [];
+  private projectiles:   Projectile[]                     = [];
+  private hud!:          RaceHUD;
+
+  // ── Networking ──────────────────────────────────────────────────────────
+  private net:           NetManager | null = null;
+  private isMultiplayer  = false;
+  private roomId:        string | undefined;
+  private netSendTimer   = 0;
 
   // ── Input ───────────────────────────────────────────────────────────────
-  private cursors!:       Phaser.Types.Input.Keyboard.CursorKeys;
-  private wasd!:          { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key };
-  private driftKey!:      Phaser.Input.Keyboard.Key;
-  private useItemKey!:    Phaser.Input.Keyboard.Key;
+  private cursors!:      Phaser.Types.Input.Keyboard.CursorKeys;
+  private wasd!:         { up: Phaser.Input.Keyboard.Key; down: Phaser.Input.Keyboard.Key; left: Phaser.Input.Keyboard.Key; right: Phaser.Input.Keyboard.Key };
+  private driftKey!:     Phaser.Input.Keyboard.Key;
+  private useItemKey!:   Phaser.Input.Keyboard.Key;
+  private chatKey!:      Phaser.Input.Keyboard.Key;
 
   // ── State ───────────────────────────────────────────────────────────────
-  private raceStarted  = false;
-  private raceFinished = false;
+  private raceStarted   = false;
+  private raceFinished  = false;
   private raceStartTime = 0;
   private prevDrifting  = false;
 
+  // ── Chat overlay ────────────────────────────────────────────────────────
+  private chatLines:    Phaser.GameObjects.Text[] = [];
+
   constructor() { super({ key: "RaceScene" }); }
 
+  // ── Init (called by React layer) ─────────────────────────────────────────
+  init() {
+    this.roomId       = this.registry.get("roomId") as string | undefined;
+    this.isMultiplayer = !!this.roomId;
+  }
+
   create() {
-    // Build track
-    const trackData  = createDefaultTrack();
-    this.track       = new Track(trackData);
+    const trackData = createDefaultTrack();
+    this.track      = new Track(trackData);
 
     this.buildTrackTiles();
     this.setupPlayer();
-    this.setupAI();
+
+    if (this.isMultiplayer) {
+      this.setupMultiplayer();
+    } else {
+      this.setupAI();
+    }
+
     this.setupItemBoxes();
     this.setupInput();
     this.setupCamera();
 
-    // HUD last (needs player kart)
-    this.hud = new RaceHUD(this, this.playerKart, TOTAL_LAPS, 1 + AI_COUNT);
-    this.hud.showCountdown(() => {
-      this.raceStarted   = true;
-      this.raceStartTime = this.time.now;
-      this.playerKart.raceStartTime = this.raceStartTime;
-      this.hud.setRaceStartTime(this.raceStartTime);
-      for (const ai of this.aiDrivers) ai.kart.raceStartTime = this.raceStartTime;
-    });
+    this.hud = new RaceHUD(this, this.playerKart, TOTAL_LAPS, this.isMultiplayer ? 8 : 1 + AI_COUNT);
 
-    // World bounds
+    if (!this.isMultiplayer) {
+      // Single-player countdown
+      this.hud.showCountdown(() => this.startRace());
+    }
+    // Multiplayer countdown is triggered by server race-start message
+
     this.physics.world.setBounds(0, 0, this.track.widthPx, this.track.heightPx);
   }
 
-  // ── Track ──────────────────────────────────────────────────────────────
+  // ── Track ───────────────────────────────────────────────────────────────
   private buildTrackTiles() {
     for (const tile of this.track.data.tiles) {
       const wx = tile.x * TILE_SIZE + TILE_SIZE / 2;
       const wy = tile.y * TILE_SIZE + TILE_SIZE / 2;
-
-      let key = `tile-${tile.type}`;
+      let key  = `tile-${tile.type}`;
       if (!(key in this.textures.list)) key = "tile-grass";
-
-      this.add.image(wx, wy, key)
-        .setAngle(tile.rotation)
-        .setDepth(0);
+      this.add.image(wx, wy, key).setAngle(tile.rotation).setDepth(0);
     }
-
-    // Checkpoint visuals (faint)
-    const checkpoints = this.track.getCheckpoints();
-    checkpoints.forEach((cp, i) => {
-      const vis = this.add.image(cp.x, cp.y, "checkpoint")
-        .setAlpha(0.18).setDepth(1);
-    });
   }
 
-  // ── Player ─────────────────────────────────────────────────────────────
+  // ── Player ──────────────────────────────────────────────────────────────
   private setupPlayer() {
     const starts = this.track.getStartPositions();
     const s      = starts[0];
@@ -114,7 +125,7 @@ export class RaceScene extends Phaser.Scene {
     this.playerSprite = new CapySprite(this, this.playerKart, true);
   }
 
-  // ── AI ─────────────────────────────────────────────────────────────────
+  // ── AI (single-player) ──────────────────────────────────────────────────
   private setupAI() {
     const starts    = this.track.getStartPositions();
     const waypoints = this.track.getCheckpoints() as Vec2[];
@@ -122,12 +133,8 @@ export class RaceScene extends Phaser.Scene {
     const aiNames   = ["TurboNut 🤖","BananaBot 🍌","SlowPoke 🐢","ZoomZoom ⚡"];
 
     this.aiDrivers = createAIDrivers(
-      waypoints,
-      starts,
-      skins,
-      "medium",
-      Math.min(AI_COUNT, starts.length - 1),
-      TOTAL_LAPS
+      waypoints, starts, skins, "medium",
+      Math.min(AI_COUNT, starts.length - 1), TOTAL_LAPS
     );
 
     this.aiDrivers.forEach((ai, i) => {
@@ -136,14 +143,116 @@ export class RaceScene extends Phaser.Scene {
     });
   }
 
-  // ── Item boxes ─────────────────────────────────────────────────────────
+  // ── Multiplayer networking ───────────────────────────────────────────────
+  private setupMultiplayer() {
+    const localPlayer: Player = {
+      id:       this.playerKart.playerId,
+      username: `Capy_${this.playerKart.playerId.slice(0, 5)}`,
+      skin:     this.playerKart.skin,
+      xp:       0,
+      elo:      1000,
+      isGuest:  true,
+    };
+
+    this.net = new NetManager(localPlayer);
+
+    // Handle room state updates (who's in lobby)
+    this.net.on("room-update", (players, status) => {
+      // Update ghost cars for existing players
+      for (const p of players) {
+        if (p.id === localPlayer.id) continue;
+        if (!this.ghostCars.has(p.id)) {
+          const starts = this.track.getStartPositions();
+          const idx    = this.ghostCars.size + 1;
+          const start  = starts[idx] ?? starts[starts.length - 1];
+          const ghost  = new GhostCar(this, p.id, p.username, p.skin as SkinId, start.x, start.y);
+          this.ghostCars.set(p.id, ghost);
+        }
+      }
+    });
+
+    // Server triggers race start (countdown)
+    this.net.on("race-start", (countdownMs) => {
+      this.hud.showCountdown(() => this.startRace());
+    });
+
+    // Remote kart state updates
+    this.net.on("state-update", (playerId, state) => {
+      const ghost = this.ghostCars.get(playerId);
+      if (ghost) {
+        ghost.receiveState({
+          x:          state.x,
+          y:          state.y,
+          angle:      state.angle,
+          speed:      state.speed,
+          isDrifting: state.isDrifting,
+        });
+      }
+    });
+
+    // New player joining
+    this.net.on("player-join", (player) => {
+      if (player.id === localPlayer.id) return;
+      if (!this.ghostCars.has(player.id)) {
+        const starts = this.track.getStartPositions();
+        const idx    = this.ghostCars.size + 1;
+        const start  = starts[Math.min(idx, starts.length - 1)];
+        const ghost  = new GhostCar(this, player.id, player.username, player.skin as SkinId, start.x, start.y);
+        this.ghostCars.set(player.id, ghost);
+      }
+    });
+
+    // Player leaving
+    this.net.on("player-leave", (playerId) => {
+      const ghost = this.ghostCars.get(playerId);
+      ghost?.destroy();
+      this.ghostCars.delete(playerId);
+    });
+
+    // Race finish
+    this.net.on("race-finish", (results) => {
+      const myResult = results.find(r => r.playerId === localPlayer.id);
+      if (myResult && !this.raceFinished) {
+        this.raceFinished = true;
+        this.hud.showRaceFinish(myResult.position, myResult.totalTime);
+      }
+    });
+
+    // Chat
+    this.net.on("chat", (playerId, message) => {
+      const ghost = this.ghostCars.get(playerId);
+      const name  = ghost?.username ?? playerId.slice(0, 6);
+      this.showChatLine(`${name}: ${message}`);
+    });
+
+    // Connect (non-blocking — game renders while connecting)
+    this.net.connect(this.roomId).then(() => {
+      // Signal ready after a short lobby pause
+      this.time.delayedCall(500, () => this.net?.sendReady());
+    }).catch(err => {
+      console.warn("[RaceScene] Multiplayer connect failed, falling back to solo", err);
+      this.isMultiplayer = false;
+      this.setupAI();
+      this.hud.showCountdown(() => this.startRace());
+    });
+  }
+
+  private startRace() {
+    this.raceStarted   = true;
+    this.raceStartTime = this.time.now;
+    this.playerKart.raceStartTime = this.raceStartTime;
+    this.hud.setRaceStartTime(this.raceStartTime);
+    for (const ai of this.aiDrivers) ai.kart.raceStartTime = this.raceStartTime;
+  }
+
+  // ── Item boxes ───────────────────────────────────────────────────────────
   private setupItemBoxes() {
     for (const pos of this.track.getItemBoxPositions()) {
       this.itemBoxes.push(new ItemBox(this, pos.x, pos.y));
     }
   }
 
-  // ── Input ──────────────────────────────────────────────────────────────
+  // ── Input ────────────────────────────────────────────────────────────────
   private setupInput() {
     this.cursors    = this.input.keyboard!.createCursorKeys();
     this.wasd       = {
@@ -154,9 +263,10 @@ export class RaceScene extends Phaser.Scene {
     };
     this.driftKey   = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
     this.useItemKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.chatKey    = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
   }
 
-  // ── Camera ─────────────────────────────────────────────────────────────
+  // ── Camera ───────────────────────────────────────────────────────────────
   private setupCamera() {
     this.cameras.main
       .setBounds(0, 0, this.track.widthPx, this.track.heightPx)
@@ -164,24 +274,32 @@ export class RaceScene extends Phaser.Scene {
       .setZoom(1.5);
   }
 
-  // ── Update loop ────────────────────────────────────────────────────────
+  // ── Main update ──────────────────────────────────────────────────────────
   update(_t: number, delta: number) {
     if (!this.raceStarted || this.raceFinished) return;
-
-    const dt = Math.min(delta / 1000, 0.05); // cap at 50ms
+    const dt = Math.min(delta / 1000, 0.05);
 
     this.updatePlayer(dt);
-    this.updateAI(dt);
+    if (!this.isMultiplayer) this.updateAI(dt);
+    this.updateGhosts(dt);
     this.checkItemPickups();
     this.updateProjectiles(dt);
     this.checkCheckpoints();
     this.updatePositions();
     this.updateSprites();
-    this.hud.update(
-      [this.playerKart, ...this.aiDrivers.map(a => a.kart)],
-      this.track.widthPx,
-      this.track.heightPx
-    );
+
+    const allKarts = [
+      this.playerKart,
+      ...this.aiDrivers.map(a => a.kart),
+      ...Array.from(this.ghostCars.values()).map(g => g.kart),
+    ];
+    this.hud.update(allKarts, this.track.widthPx, this.track.heightPx);
+
+    // Send state to server
+    if (this.isMultiplayer && this.net) {
+      this.net.tickSendState(dt, this.playerKart);
+      this.net.sendInput(this.playerKart.input);
+    }
   }
 
   private updatePlayer(dt: number) {
@@ -191,7 +309,6 @@ export class RaceScene extends Phaser.Scene {
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
     const drift = this.driftKey.isDown;
 
-    // Detect mini-turbo release
     if (this.prevDrifting && !drift && this.playerKart.state.driftCharge > 0.5) {
       this.playerSprite.showMiniTurbo();
     }
@@ -199,37 +316,35 @@ export class RaceScene extends Phaser.Scene {
 
     this.playerKart.input = { up, down, left, right, drift };
 
-    // Use item
     if (Phaser.Input.Keyboard.JustDown(this.useItemKey)) {
       const type = this.playerKart.usePowerUp();
       if (type) this.fireItem(type, this.playerKart);
     }
 
-    const surface = this.track.getSurfaceAt(
-      this.playerKart.state.position.x,
-      this.playerKart.state.position.y
-    );
+    const surface = this.track.getSurfaceAt(this.playerKart.state.position.x, this.playerKart.state.position.y);
     this.playerKart.update(dt, surface);
-
-    // Clamp to world
-    this.playerKart.state.position.x = Phaser.Math.Clamp(this.playerKart.state.position.x, 0, this.track.widthPx);
-    this.playerKart.state.position.y = Phaser.Math.Clamp(this.playerKart.state.position.y, 0, this.track.heightPx);
+    this.clampToBounds(this.playerKart);
   }
 
   private updateAI(dt: number) {
     for (const ai of this.aiDrivers) {
       if (ai.kart.isFinished()) continue;
-      const surface = this.track.getSurfaceAt(
-        ai.kart.state.position.x,
-        ai.kart.state.position.y
-      );
+      const surface = this.track.getSurfaceAt(ai.kart.state.position.x, ai.kart.state.position.y);
       ai.update(dt, surface);
-      ai.kart.state.position.x = Phaser.Math.Clamp(ai.kart.state.position.x, 0, this.track.widthPx);
-      ai.kart.state.position.y = Phaser.Math.Clamp(ai.kart.state.position.y, 0, this.track.heightPx);
+      this.clampToBounds(ai.kart);
     }
   }
 
-  // ── Item pickup ─────────────────────────────────────────────────────────
+  private updateGhosts(dt: number) {
+    for (const ghost of this.ghostCars.values()) ghost.update(dt);
+  }
+
+  private clampToBounds(kart: CapyKart) {
+    kart.state.position.x = Phaser.Math.Clamp(kart.state.position.x, 0, this.track.widthPx);
+    kart.state.position.y = Phaser.Math.Clamp(kart.state.position.y, 0, this.track.heightPx);
+  }
+
+  // ── Item pickups ─────────────────────────────────────────────────────────
   private checkItemPickups() {
     const allKarts = [this.playerKart, ...this.aiDrivers.map(a => a.kart)];
     for (const box of this.itemBoxes) {
@@ -241,88 +356,67 @@ export class RaceScene extends Phaser.Scene {
     }
   }
 
-  // ── Projectile fire + update ────────────────────────────────────────────
   private fireItem(type: PowerUpType, kart: CapyKart) {
-    if (type === "banana" || type === "shell") {
-      const textureKey = type === "banana" ? "proj-banana" : "proj-shell";
-      const speed      = type === "shell"  ? 600 : 0;
-      const sprite     = this.add.image(
-        kart.state.position.x,
-        kart.state.position.y,
-        textureKey
-      ).setDepth(8);
-
-      this.projectiles.push({
-        type,
-        sprite,
-        x: kart.state.position.x,
-        y: kart.state.position.y,
-        angle: type === "shell" ? kart.state.angle : 0,
-        speed,
-        ownerId: kart.id,
-        active: true,
-      });
-    }
+    if (type !== "banana" && type !== "shell") return;
+    const key   = type === "banana" ? "proj-banana" : "proj-shell";
+    const speed = type === "shell"  ? 620 : 0;
+    const sprite = this.add.image(kart.state.position.x, kart.state.position.y, key).setDepth(8);
+    this.projectiles.push({ type, sprite, x: kart.state.position.x, y: kart.state.position.y, angle: kart.state.angle, speed, ownerId: kart.id, active: true });
   }
 
   private updateProjectiles(dt: number) {
     const allKarts = [this.playerKart, ...this.aiDrivers.map(a => a.kart)];
-
     for (const proj of this.projectiles) {
       if (!proj.active) continue;
-
       proj.x += Math.cos(proj.angle) * proj.speed * dt;
       proj.y += Math.sin(proj.angle) * proj.speed * dt;
       proj.sprite.setPosition(proj.x, proj.y);
-
-      // Check hit
       for (const kart of allKarts) {
         if (kart.id === proj.ownerId) continue;
         if (distance(kart.state.position, { x: proj.x, y: proj.y }) < 30) {
           kart.hitByItem();
           proj.active = false;
           proj.sprite.destroy();
-
-          // Hit flash
           const flash = this.add.circle(proj.x, proj.y, 20, 0xFF4444, 0.9).setDepth(20);
           this.tweens.add({ targets: flash, scale: 3, alpha: 0, duration: 300, onComplete: () => flash.destroy() });
         }
       }
-
-      // Shell OOB
-      if (proj.type === "shell" && (proj.x < 0 || proj.x > this.track.widthPx || proj.y < 0 || proj.y > this.track.heightPx)) {
+      if (proj.x < 0 || proj.x > this.track.widthPx || proj.y < 0 || proj.y > this.track.heightPx) {
         proj.active = false;
         proj.sprite.destroy();
       }
     }
-
-    // Prune dead projectiles
     this.projectiles = this.projectiles.filter(p => p.active);
   }
 
-  // ── Checkpoint + lap logic ──────────────────────────────────────────────
+  // ── Checkpoints + laps ───────────────────────────────────────────────────
   private checkCheckpoints() {
-    const allKarts      = [this.playerKart, ...this.aiDrivers.map(a => a.kart)];
-    const checkpoints   = this.track.getCheckpoints();
-    const finishLine    = checkpoints[0]; // first checkpoint is after finish line
+    const allKarts    = [this.playerKart, ...this.aiDrivers.map(a => a.kart)];
+    const checkpoints = this.track.getCheckpoints();
+    const finishLine  = checkpoints[0];
 
     for (const kart of allKarts) {
       if (kart.isFinished()) continue;
       const pos = kart.state.position;
 
-      // Check each checkpoint
       checkpoints.forEach((cp, i) => {
-        if (i === 0) return; // skip finish-as-checkpoint
+        if (i === 0) return;
         if (distance(pos, cp) < CHECKPOINT_R) {
           kart.passCheckpoint(i, checkpoints.length - 1, this.time.now);
+          // Tell server
+          if (this.isMultiplayer && kart === this.playerKart) {
+            this.net?.send?.({ type: "game-state" as never, state: { checkpoint: i } as never } as never);
+          }
         }
       });
 
-      // Check finish line (checkpoint index 0)
       if (distance(pos, finishLine) < FINISH_R) {
         const finished = kart.completeLap(this.time.now);
         if (kart.currentLap > 0 && kart.currentLap <= TOTAL_LAPS && kart === this.playerKart) {
           this.hud.showLapFlash(kart.currentLap);
+          if (this.isMultiplayer) {
+            this.net?.send?.({ type: "game-state" as never, state: { lapComplete: { lapTime: this.playerKart.lapTimes.at(-1) ?? 0 } } as never } as never);
+          }
         }
         if (finished) this.onKartFinished(kart);
       }
@@ -330,37 +424,58 @@ export class RaceScene extends Phaser.Scene {
   }
 
   private onKartFinished(kart: CapyKart) {
-    kart.racePosition = this.aiDrivers.filter(a => a.kart.isFinished()).length + 1;
+    const pos = this.aiDrivers.filter(a => a.kart.isFinished()).length + 1;
+    kart.racePosition = pos;
     if (kart === this.playerKart) {
-      this.raceFinished = true;
-      const totalTime   = kart.getTotalRaceTime(this.time.now);
-      this.hud.showRaceFinish(kart.racePosition, totalTime);
+      const totalTime = kart.getTotalRaceTime(this.time.now);
+      if (this.isMultiplayer) {
+        this.net?.send?.({ type: "game-state" as never, state: { raceFinish: { totalTime } } as never } as never);
+      } else {
+        this.raceFinished = true;
+        this.hud.showRaceFinish(pos, totalTime);
+      }
     }
   }
 
-  // ── Race position sorting ───────────────────────────────────────────────
+  // ── Position sort ────────────────────────────────────────────────────────
   private updatePositions() {
-    const allKarts = [this.playerKart, ...this.aiDrivers.map(a => a.kart)];
+    const allKarts    = [this.playerKart, ...this.aiDrivers.map(a => a.kart)];
     const checkpoints = this.track.getCheckpoints();
-
-    // Score = laps*1000 + checkpointsPassed + proximity to next checkpoint (normalised)
     for (const kart of allKarts) {
       const nextCp = checkpoints[(kart.lapData.checkpointsPassed.size) % checkpoints.length];
       const dist   = nextCp ? distance(kart.state.position, nextCp) : 0;
-      kart.progressDistance = kart.currentLap * 10000
-        + kart.lapData.checkpointsPassed.size * 1000
-        - dist * 0.01;
+      kart.progressDistance = kart.currentLap * 10000 + kart.lapData.checkpointsPassed.size * 1000 - dist * 0.01;
     }
-
     const sorted = [...allKarts].sort((a, b) => b.progressDistance - a.progressDistance);
     sorted.forEach((k, i) => { k.racePosition = i + 1; });
   }
 
-  // ── Visual sync ─────────────────────────────────────────────────────────
+  // ── Sprite sync ──────────────────────────────────────────────────────────
   private updateSprites() {
     this.playerSprite.update();
-    for (const [id, sprite] of this.aiSprites) {
-      sprite.update();
-    }
+    for (const sprite of this.aiSprites.values()) sprite.update();
+  }
+
+  // ── Chat ─────────────────────────────────────────────────────────────────
+  private showChatLine(text: string) {
+    const W = this.scale.width;
+    const y = this.scale.height - 180 - this.chatLines.length * 22;
+    const line = this.add.text(W / 2, y, text, {
+      fontSize: "13px", color: "#ffffffcc",
+      stroke: "#000", strokeThickness: 3,
+      fontFamily: "system-ui",
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(190);
+
+    this.chatLines.push(line);
+    this.tweens.add({ targets: line, alpha: 0, delay: 5000, duration: 1000, onComplete: () => {
+      line.destroy();
+      this.chatLines = this.chatLines.filter(l => l !== line);
+    }});
+  }
+
+  // ── Cleanup ──────────────────────────────────────────────────────────────
+  shutdown() {
+    this.net?.destroy();
+    this.ghostCars.forEach(g => g.destroy());
   }
 }
