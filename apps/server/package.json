@@ -1,0 +1,25 @@
+{
+  "name": "@capyjam/server",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "@hono/node-server": "^1.12.0",
+    "@capyjam/types": "workspace:*",
+    "@capyjam/game-engine": "workspace:*",
+    "ws": "^8.17.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "tsx": "^4.15.0",
+    "@types/ws": "^8.5.10",
+    "@types/uuid": "^10.0.0"
+  }
+}

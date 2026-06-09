@@ -1,0 +1,10 @@
+node_modules
+.turbo
+.env
+.env.local
+dist
+.next
+*.tsbuildinfo
+.DS_Store
+supabase/.branches
+supabase/.temp

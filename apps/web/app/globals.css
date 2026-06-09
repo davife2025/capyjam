@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-capy-brown: #8B5A2B;
+  --color-capy-tan: #C4965A;
+  --color-track-green: #3A7D44;
+  --color-road-gray: #4A4A4A;
+  --color-boost-yellow: #F9CB42;
+  --color-mud-brown: #6B4226;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Game canvas container */
+#game-canvas-container canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #1a1a2e; }
+::-webkit-scrollbar-thumb { background: #534AB7; border-radius: 3px; }
+
+/* Capy button style */
+.btn-capy {
+  @apply px-6 py-3 rounded-xl font-semibold transition-all duration-150;
+  @apply bg-capy-yellow text-gray-900 hover:brightness-110 active:scale-95;
+  box-shadow: 0 4px 0 #BA7517;
+}
+.btn-capy:active { box-shadow: 0 1px 0 #BA7517; transform: translateY(3px); }
+
+.btn-secondary {
+  @apply px-6 py-3 rounded-xl font-semibold transition-all duration-150;
+  @apply bg-gray-800 text-white hover:bg-gray-700 active:scale-95;
+  box-shadow: 0 4px 0 #111;
+}
+
+/* Race position badge */
+.position-badge {
+  @apply inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm;
+}
+.position-badge.p1 { @apply bg-yellow-400 text-gray-900; }
+.position-badge.p2 { @apply bg-gray-300 text-gray-900; }
+.position-badge.p3 { @apply bg-amber-600 text-white; }
+.position-badge.other { @apply bg-gray-700 text-gray-300; }
