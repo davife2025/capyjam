@@ -282,6 +282,25 @@ export class RaceHUD {
       .on("pointerdown", () => {
         this.scene.scene.restart();
       });
+
+    // Watch replay button — links out to /replay/:id (handled by React layer
+    // via the capyjam:race-finish event dispatched in RaceScene)
+    const replayBtn = this.scene.add
+      .text(W / 2, H / 2 + 116, "[ 🎬 Watch Replay ]", {
+        ...STYLE_BASE,
+        fontSize: "16px",
+        color: "#7FDDFF",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(300)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerover", () => replayBtn.setColor("#ffffff"))
+      .on("pointerout",  () => replayBtn.setColor("#7FDDFF"))
+      .on("pointerdown", () => {
+        const id = (window as unknown as { __capyjamLastReplayId?: string }).__capyjamLastReplayId;
+        if (id) window.location.href = `/replay/${id}`;
+      });
   }
 
   showLapFlash(lap: number): void {

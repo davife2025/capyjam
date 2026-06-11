@@ -10,6 +10,10 @@ import { NetManager } from "@/game/net/NetManager";
 import { getSoundManager, type SoundManager } from "@/game/audio/SoundManager";
 import { ParticleManager } from "@/game/fx/ParticleManager";
 import { TouchControls } from "@/game/input/TouchControls";
+import { ReplayRecorder } from "@/game/replay/ReplayRecorder";
+import { ReplayPlayer } from "@/game/replay/ReplayPlayer";
+import { GhostSprite } from "@/game/replay/GhostSprite";
+import { saveReplayLocally, getBestLocalReplay } from "@/game/replay/ReplayStorage";
 import { v4 as uuid } from "uuid";
 import type { SkinId, PowerUpType, Player } from "@capyjam/types";
 import type { Vec2 } from "@capyjam/game-engine";
@@ -66,6 +70,12 @@ export class RaceScene extends Phaser.Scene {
   private fx!:           ParticleManager;
   private touch!:        TouchControls;
   private muteIcon!:     Phaser.GameObjects.Text;
+
+  // ── Replay system ────────────────────────────────────────────────────────
+  private recorder!:     ReplayRecorder;
+  private ghostPlayer:   ReplayPlayer | null = null;
+  private ghostSprite:   GhostSprite  | null = null;
+  private ghostRaceMode  = false; // racing against best lap
 
   // ── Chat overlay ────────────────────────────────────────────────────────
   private chatLines:    Phaser.GameObjects.Text[] = [];
@@ -256,6 +266,25 @@ export class RaceScene extends Phaser.Scene {
     this.playerKart.raceStartTime = this.raceStartTime;
     this.hud.setRaceStartTime(this.raceStartTime);
     for (const ai of this.aiDrivers) ai.kart.raceStartTime = this.raceStartTime;
+
+    // Start recording
+    this.recorder = new ReplayRecorder();
+    this.recorder.start(
+      this.track.data.id,
+      this.track.data.name,
+      TOTAL_LAPS
+    );
+
+    // Load best ghost for this track (solo only)
+    if (!this.isMultiplayer) {
+      const bestReplay = getBestLocalReplay(this.track.data.id);
+      if (bestReplay) {
+        this.ghostPlayer = new ReplayPlayer(bestReplay);
+        this.ghostPlayer.start();
+        this.ghostSprite = new GhostSprite(this, this.ghostPlayer);
+        this.ghostRaceMode = true;
+      }
+    }
   }
 
   // ── Item boxes ───────────────────────────────────────────────────────────
@@ -331,11 +360,15 @@ export class RaceScene extends Phaser.Scene {
     this.updatePlayer(dt);
     if (!this.isMultiplayer) this.updateAI(dt);
     this.updateGhosts(dt);
+    this.updateGhostRace();
     this.checkItemPickups();
     this.updateProjectiles(dt);
     this.checkCheckpoints();
     this.updatePositions();
     this.updateSprites();
+
+    // Tick replay recorder every frame
+    this.recorder?.tick(this.playerKart.state);
 
     const allKarts = [
       this.playerKart,
@@ -408,6 +441,14 @@ export class RaceScene extends Phaser.Scene {
 
   private updateGhosts(dt: number) {
     for (const ghost of this.ghostCars.values()) ghost.update(dt);
+  }
+
+  private updateGhostRace(): void {
+    if (!this.ghostPlayer || !this.ghostSprite) return;
+    const playerRaceMs = this.raceStarted
+      ? this.time.now - this.raceStartTime
+      : 0;
+    this.ghostSprite.update(playerRaceMs);
   }
 
   private clampToBounds(kart: CapyKart) {
@@ -506,6 +547,25 @@ export class RaceScene extends Phaser.Scene {
     kart.racePosition = pos;
     if (kart === this.playerKart) {
       const totalTime = kart.getTotalRaceTime(this.time.now);
+
+      // Stop recorder and save replay
+      if (this.recorder?.isRecording) {
+        this.recorder.recordEvent("finish", { position: pos, totalTime });
+        const replay = this.recorder.stop(
+          "Player",
+          this.playerKart.skin,
+          totalTime,
+          [...this.playerKart.lapTimes],
+          pos
+        );
+        saveReplayLocally(replay);
+        (window as unknown as { __capyjamLastReplayId?: string }).__capyjamLastReplayId = replay.id;
+        // Dispatch custom event so React UI can show replay button
+        window.dispatchEvent(new CustomEvent("capyjam:race-finish", {
+          detail: { replayId: replay.id, totalTime, position: pos },
+        }));
+      }
+
       if (this.isMultiplayer) {
         this.net?.send?.({ type: "game-state" as never, state: { raceFinish: { totalTime } } as never } as never);
       } else {
@@ -558,6 +618,7 @@ export class RaceScene extends Phaser.Scene {
   shutdown() {
     this.net?.destroy();
     this.ghostCars.forEach(g => g.destroy());
+    this.ghostSprite?.destroy();
     this.sound?.stopEngine();
     this.sound?.stopMusic();
     this.fx?.destroy();
