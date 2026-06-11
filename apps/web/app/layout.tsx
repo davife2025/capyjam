@@ -24,11 +24,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           CapyJam hackathon ownership meta tag — required by submission rules.
           Update the `content` value to your actual CapyJam username before submitting.
           See SUBMISSION.md for the full pre-submit checklist.
+
+    //<meta name="capyjam-owner" content="capyjam-racer" />//
+
         */}
-        <meta name="capyjam-owner" content="capyjam-racer" />
+    
+        <meta name="capyjam" content="b01d6b28-6aab-4c0c-befd-241d7091284d" id="capyjam-meta" />
       </head>
       <body className="bg-gray-950 text-white min-h-screen antialiased">
-
         {/* ── Global nav ────────────────────────────────────────────────────── */}
         <nav className="sticky top-0 z-50 border-b border-gray-800/60 bg-gray-950/80 backdrop-blur-md">
           <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between gap-2">
