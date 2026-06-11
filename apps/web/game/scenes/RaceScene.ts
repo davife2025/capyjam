@@ -13,7 +13,7 @@ import { TouchControls } from "@/game/input/TouchControls";
 import { ReplayRecorder } from "@/game/replay/ReplayRecorder";
 import { ReplayPlayer } from "@/game/replay/ReplayPlayer";
 import { GhostSprite } from "@/game/replay/GhostSprite";
-import { saveReplayLocally, getBestLocalReplay } from "@/game/replay/ReplayStorage";
+import { saveReplayLocally, getBestLocalReplay, loadReplayLocally } from "@/game/replay/ReplayStorage";
 import { v4 as uuid } from "uuid";
 import type { SkinId, PowerUpType, Player } from "@capyjam/types";
 import type { Vec2 } from "@capyjam/game-engine";
@@ -50,6 +50,7 @@ export class RaceScene extends Phaser.Scene {
   private net:           NetManager | null = null;
   private isMultiplayer  = false;
   private roomId:        string | undefined;
+  private forceGhostId:  string | undefined;
   private netSendTimer   = 0;
 
   // ── Input ───────────────────────────────────────────────────────────────
@@ -84,8 +85,9 @@ export class RaceScene extends Phaser.Scene {
 
   // ── Init (called by React layer) ─────────────────────────────────────────
   init() {
-    this.roomId       = this.registry.get("roomId") as string | undefined;
+    this.roomId        = this.registry.get("roomId") as string | undefined;
     this.isMultiplayer = !!this.roomId;
+    this.forceGhostId  = this.registry.get("forceGhostId") as string | undefined;
   }
 
   create() {
@@ -275,11 +277,18 @@ export class RaceScene extends Phaser.Scene {
       TOTAL_LAPS
     );
 
-    // Load best ghost for this track (solo only)
+    // Load ghost for this track (solo only)
+    // Priority: explicit forceGhostId (from "Ghost Race" link) > best local replay
     if (!this.isMultiplayer) {
-      const bestReplay = getBestLocalReplay(this.track.data.id);
-      if (bestReplay) {
-        this.ghostPlayer = new ReplayPlayer(bestReplay);
+      let ghostReplay = null;
+      if (this.forceGhostId) {
+        ghostReplay = loadReplayLocally(this.forceGhostId);
+      }
+      if (!ghostReplay) {
+        ghostReplay = getBestLocalReplay(this.track.data.id);
+      }
+      if (ghostReplay) {
+        this.ghostPlayer = new ReplayPlayer(ghostReplay);
         this.ghostPlayer.start();
         this.ghostSprite = new GhostSprite(this, this.ghostPlayer);
         this.ghostRaceMode = true;

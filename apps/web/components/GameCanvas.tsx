@@ -6,9 +6,10 @@ import Link from "next/link";
 interface GameCanvasProps {
   roomId?: string;
   trackId: string;
+  forceGhostId?: string; // explicit replay ID to load as ghost (overrides best-local)
 }
 
-export function GameCanvas({ roomId, trackId }: GameCanvasProps) {
+export function GameCanvas({ roomId, trackId, forceGhostId }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +50,7 @@ export function GameCanvas({ roomId, trackId }: GameCanvasProps) {
         // Pass room/track config to game via registry
         game.registry?.set("roomId", roomId);
         game.registry?.set("trackId", trackId);
+        game.registry?.set("forceGhostId", forceGhostId);
 
         setLoading(false);
       } catch (err) {
@@ -66,7 +68,7 @@ export function GameCanvas({ roomId, trackId }: GameCanvasProps) {
         gameRef.current = null;
       }
     };
-  }, [roomId, trackId]);
+  }, [roomId, trackId, forceGhostId]);
 
   return (
     <div className="relative flex-1 flex flex-col">
@@ -76,7 +78,8 @@ export function GameCanvas({ roomId, trackId }: GameCanvasProps) {
           ← Lobby
         </Link>
         <p className="text-sm font-semibold text-yellow-400">🐾 CapyJam Racing</p>
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-gray-500 flex items-center gap-2">
+          {forceGhostId && <span className="text-purple-400">👻 Ghost Race</span>}
           {roomId ? `Room: ${roomId.slice(0, 8)}` : "Quick Race"}
         </div>
       </div>

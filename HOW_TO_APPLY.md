@@ -1,45 +1,23 @@
-# Session 7 Diff — Replay System
+# Session 8 Diff — Final Integration Pass
 
-Drop into capyjam/ monorepo root, merging with existing structure.
+Drop into capyjam/ monorepo root.
 
 ## Changed files (3)
-- apps/web/app/profile/page.tsx     — added "My Replays" section (ReplayList)
-- apps/web/game/scenes/RaceScene.ts — records every race, loads best ghost, saves on finish
-- apps/web/game/hud/RaceHUD.ts      — finish screen now has "Watch Replay" button
+- apps/web/components/GameCanvas.tsx  — new `forceGhostId` prop, shows "👻 Ghost Race" badge
+- apps/web/app/race/[id]/page.tsx     — reads `?ghost=<replayId>` query param, passes to GameCanvas
+- apps/web/game/scenes/RaceScene.ts   — reads `forceGhostId` from registry; "Ghost Race" links from
+                                         the replay list now actually load that specific replay
+                                         (falls back to best-local if not found)
 
-## New files (8)
-- apps/web/game/replay/ReplayRecorder.ts   — records kart state at 24Hz, delta-compresses ~60%
-- apps/web/game/replay/ReplayPlayer.ts     — plays back frames with interpolation, variable speed
-- apps/web/game/replay/ReplayStorage.ts    — localStorage (last 10) + Supabase upload/download
-- apps/web/game/replay/GhostSprite.ts      — semi-transparent ghost kart with live time-delta display
-- apps/web/game/scenes/ReplayViewerScene.ts — full playback UI: play/pause, speed (0.5x-4x), lap chips
-- apps/web/components/ReplayList.tsx       — replay list with Watch / Ghost Race / Delete actions
-- apps/web/app/replay/[id]/page.tsx        — replay viewer page (loads local or remote)
-- supabase/migrations/006_replays.sql      — replays table, storage bucket, RLS, prune function
+## New files (1)
+- PROJECT_SUMMARY.md — consolidated overview of all 8 sessions, repo layout, run instructions
 
-## How it works
+## What this fixes
+Previously, the "👻 Ghost Race" button on `/profile` and `/replay/:id` linked to
+`/race/quick?ghost=<id>` but the query param was ignored — the race always loaded
+your best local replay (or none). Now it correctly loads the *specific* replay
+you clicked, with a visible badge confirming ghost mode is active.
 
-### Recording
-Every race auto-records at 24fps (delta-compressed to ~60% smaller).
-On finish, saved to localStorage (last 10 replays kept, oldest evicted).
-
-### Ghost racing
-Starting a solo race automatically loads your best replay for that track
-as a translucent ghost kart with a live +/- time delta shown above it.
-
-### Replay viewer
-`/replay/:id` — full Phaser playback with:
-- Play/pause (Space)
-- Speed cycling 0.5x → 1x → 2x → 4x (F)
-- Restart (R)
-- Per-lap time chips, best lap highlighted in gold
-- Progress bar + elapsed/total time
-
-### Compression
-Frames store only deltas (position/angle/speed change since previous frame)
-plus a bitfield for drift/boost/spin flags — roughly 60% smaller than raw frames.
-
-## Run migration
-```bash
-supabase db push   # applies 006_replays.sql (creates 'replays' storage bucket)
-```
+## This wraps up the CapyJam build
+See PROJECT_SUMMARY.md for the full feature list and SUBMISSION.md (session 6)
+for deploy steps and the pre-submit checklist.
