@@ -107,6 +107,39 @@ export class NetManager {
     this.ws.send({ type: "chat", playerId: this.localPlayer.id, message });
   }
 
+  /**
+   * Generic escape hatch for sending arbitrary WsMessage payloads.
+   * Prefer the typed helpers below (sendCheckpoint/sendLapComplete/sendRaceFinish)
+   * for race-progress events.
+   */
+  send(msg: WsMessage): void {
+    this.ws.send(msg);
+  }
+
+  /** Notify server the local player passed checkpoint `index`. */
+  sendCheckpoint(index: number): void {
+    this.ws.send({
+      type:  "game-state",
+      state: { checkpoint: index },
+    });
+  }
+
+  /** Notify server the local player completed a lap. */
+  sendLapComplete(lapTime: number): void {
+    this.ws.send({
+      type:  "game-state",
+      state: { lapComplete: { lapTime } },
+    });
+  }
+
+  /** Notify server the local player finished the race. */
+  sendRaceFinish(totalTime: number): void {
+    this.ws.send({
+      type:  "game-state",
+      state: { raceFinish: { totalTime } },
+    });
+  }
+
   private handleMessage(msg: WsMessage): void {
     switch (msg.type) {
       case "game-state": {

@@ -87,8 +87,13 @@ vercel deploy --prod
 ## 🐛 Known Limitations / Future Work
 
 - AI opponents don't appear in multiplayer rooms (multiplayer is human-only)
+- **RaceScene always loads the built-in "Capy Jungle Circuit"** — community tracks
+  published via `/build` are stored in Supabase and listed in the Track Browser,
+  but `/race/:trackId` for a custom track UUID does not yet fetch and render that
+  track's tile data. `Track.trackFromSupabaseRow()` exists for this purpose;
+  wiring it requires an async track-load step before `RaceScene.create()`.
+  `incrementTrackPlays()` is similarly defined but not yet called for the same reason.
 - Track builder doesn't yet support custom rotations or multi-tile objects
-- No replay/ghost-race-against-yourself mode
 - Server-side physics validation is minimal (anti-cheat not implemented)
 - Track thumbnails in community browser are placeholders
 

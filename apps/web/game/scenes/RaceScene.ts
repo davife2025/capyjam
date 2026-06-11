@@ -532,7 +532,7 @@ export class RaceScene extends Phaser.Scene {
           kart.passCheckpoint(i, checkpoints.length - 1, this.time.now);
           // Tell server
           if (this.isMultiplayer && kart === this.playerKart) {
-            this.net?.send?.({ type: "game-state" as never, state: { checkpoint: i } as never } as never);
+            this.net?.sendCheckpoint(i);
           }
         }
       });
@@ -543,7 +543,7 @@ export class RaceScene extends Phaser.Scene {
           this.hud.showLapFlash(kart.currentLap);
           this.sound.play("lap");
           if (this.isMultiplayer) {
-            this.net?.send?.({ type: "game-state" as never, state: { lapComplete: { lapTime: this.playerKart.lapTimes.at(-1) ?? 0 } } as never } as never);
+            this.net?.sendLapComplete(this.playerKart.lapTimes.at(-1) ?? 0);
           }
         }
         if (finished) this.onKartFinished(kart);
@@ -576,7 +576,7 @@ export class RaceScene extends Phaser.Scene {
       }
 
       if (this.isMultiplayer) {
-        this.net?.send?.({ type: "game-state" as never, state: { raceFinish: { totalTime } } as never } as never);
+        this.net?.sendRaceFinish(totalTime);
       } else {
         this.raceFinished = true;
         this.sound.play("finish");
