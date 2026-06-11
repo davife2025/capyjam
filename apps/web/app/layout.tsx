@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         */}
     
-        <meta name="capyjam" content="b01d6b28-6aab-4c0c-befd-241d7091284d" id="capyjam-meta" />
+        <meta name="x-ogp-key" content="b01d6b28-6aab-4c0c-befd-241d7091284d" id="ogp-key-meta" />
       </head>
       <body className="bg-gray-950 text-white min-h-screen antialiased">
         {/* ── Global nav ────────────────────────────────────────────────────── */}
