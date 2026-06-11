@@ -1,4 +1,4 @@
-import type { ReplayData, ReplayEvent } from "./ReplayRecorder";
+import type { ReplayData, ReplayEvent, ReplayFrame } from "./ReplayRecorder";
 import type { KartState } from "@capyjam/game-engine";
 import { createKartState } from "@capyjam/game-engine";
 
@@ -120,7 +120,7 @@ export class ReplayPlayer {
     return this.currentState;
   }
 
-  private frameToState(f: ReturnType<typeof this.replay.frames[0]>): KartState {
+  private frameToState(f: ReplayFrame): KartState {
     return {
       position:    { x: f.x, y: f.y },
       velocity:    { x: 0, y: 0 },

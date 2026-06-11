@@ -1,6 +1,6 @@
 import Phaser from "phaser";
-import { Track, TILE_SIZE } from "@capyjam/game-engine";
-import type { TrackData, TrackTile } from "@capyjam/types";
+import { Track, TILE_SIZE, type TrackData } from "@capyjam/game-engine";
+import type { TrackTile } from "@capyjam/types";
 
 /**
  * BuildScene: renders a live preview of the track inside the editor.

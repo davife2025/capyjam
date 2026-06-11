@@ -1,8 +1,8 @@
 "use client";
 
 import { getSupabaseClient } from "@capyjam/supabase-client";
-import type { TrackData, TrackTile } from "@capyjam/types";
-import { TILE_SIZE } from "@capyjam/game-engine";
+import type { TrackTile } from "@capyjam/types";
+import { TILE_SIZE, type TrackData } from "@capyjam/game-engine";
 
 // ── Local draft persistence ───────────────────────────────────────────────────
 

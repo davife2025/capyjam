@@ -22,7 +22,7 @@ export class ParticleManager {
     const scene = this.scene;
 
     if (!scene.textures.exists("particle-dot")) {
-      const g = scene.make.graphics({ x: 0, y: 0, add: false });
+      const g = scene.make.graphics({ x: 0, y: 0 }, false);
       g.fillStyle(0xffffff);
       g.fillCircle(4, 4, 4);
       g.generateTexture("particle-dot", 8, 8);
@@ -30,7 +30,7 @@ export class ParticleManager {
     }
 
     if (!scene.textures.exists("particle-spark")) {
-      const g = scene.make.graphics({ x: 0, y: 0, add: false });
+      const g = scene.make.graphics({ x: 0, y: 0 }, false);
       g.fillStyle(0xffffff);
       g.fillRect(0, 0, 6, 2);
       g.generateTexture("particle-spark", 6, 2);
@@ -38,7 +38,7 @@ export class ParticleManager {
     }
 
     if (!scene.textures.exists("particle-confetti")) {
-      const g = scene.make.graphics({ x: 0, y: 0, add: false });
+      const g = scene.make.graphics({ x: 0, y: 0 }, false);
       g.fillStyle(0xffffff);
       g.fillRect(0, 0, 5, 8);
       g.generateTexture("particle-confetti", 5, 8);

@@ -67,7 +67,7 @@ export class RaceScene extends Phaser.Scene {
   private prevDrifting  = false;
 
   // ── Polish: audio, fx, touch ──────────────────────────────────────────────
-  private sound!:        SoundManager;
+  private sfx!:        SoundManager;
   private fx!:           ParticleManager;
   private touch!:        TouchControls;
   private muteIcon!:     Phaser.GameObjects.Text;
@@ -327,14 +327,14 @@ export class RaceScene extends Phaser.Scene {
 
   // ── Audio ────────────────────────────────────────────────────────────────
   private setupAudio() {
-    this.sound = getSoundManager();
+    this.sfx = getSoundManager();
 
     // Resume/init AudioContext on first user gesture (browser autoplay policy)
     const unlock = () => {
-      this.sound.init();
-      this.sound.resume();
-      this.sound.startEngine();
-      this.sound.startMusic();
+      this.sfx.init();
+      this.sfx.resume();
+      this.sfx.startEngine();
+      this.sfx.startMusic();
       this.input.off("pointerdown", unlock);
       this.input.keyboard?.off("keydown", unlock);
     };
@@ -351,7 +351,7 @@ export class RaceScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true })
       .on("pointerdown", (_p: Phaser.Input.Pointer, _x: number, _y: number, e: { stopPropagation: () => void }) => {
         e.stopPropagation();
-        const muted = this.sound.toggleMute();
+        const muted = this.sfx.toggleMute();
         this.muteIcon.setText(muted ? "🔇" : "🔊");
       });
   }
@@ -404,7 +404,7 @@ export class RaceScene extends Phaser.Scene {
 
     if (this.prevDrifting && !drift && this.playerKart.state.driftCharge > 0.5) {
       this.playerSprite.showMiniTurbo();
-      this.sound.play("boost");
+      this.sfx.play("boost");
     }
     this.prevDrifting = drift;
 
@@ -415,8 +415,8 @@ export class RaceScene extends Phaser.Scene {
       const type = this.playerKart.usePowerUp();
       if (type) {
         this.fireItem(type, this.playerKart);
-        this.sound.play("item-use");
-        if (type === "speed-boost" || type === "nitro") this.sound.play("boost");
+        this.sfx.play("item-use");
+        if (type === "speed-boost" || type === "nitro") this.sfx.play("boost");
       }
     }
 
@@ -426,7 +426,7 @@ export class RaceScene extends Phaser.Scene {
 
     // ── Audio + particle feedback ──────────────────────────────────────────
     const normSpeed = Math.min(1, Math.abs(this.playerKart.state.speed) / 520);
-    this.sound.updateEngine(normSpeed, this.playerKart.isBoosting());
+    this.sfx.updateEngine(normSpeed, this.playerKart.isBoosting());
 
     const { x, y } = this.playerKart.state.position;
     this.fx.updateExhaust(x, y, this.playerKart.state.angle, this.playerKart.state.speed);
@@ -434,7 +434,7 @@ export class RaceScene extends Phaser.Scene {
 
     if (this.playerKart.state.isDrifting && this.playerKart.state.driftCharge > 0.3) {
       this.fx.emitDriftSparks(x, y);
-      if (Math.random() < 0.15) this.sound.play("drift");
+      if (Math.random() < 0.15) this.sfx.play("drift");
     }
   }
 
@@ -475,7 +475,7 @@ export class RaceScene extends Phaser.Scene {
         if (pu) {
           kart.pickUpPowerUp(pu);
           this.fx.emitItemPickup(kart.state.position.x, kart.state.position.y);
-          if (kart === this.playerKart) this.sound.play("item-pickup");
+          if (kart === this.playerKart) this.sfx.play("item-pickup");
         }
       }
     }
@@ -503,7 +503,7 @@ export class RaceScene extends Phaser.Scene {
           proj.active = false;
           proj.sprite.destroy();
           this.fx.emitImpact(proj.x, proj.y);
-          if (kart === this.playerKart) this.sound.play("hit");
+          if (kart === this.playerKart) this.sfx.play("hit");
           const flash = this.add.circle(proj.x, proj.y, 20, 0xFF4444, 0.9).setDepth(20);
           this.tweens.add({ targets: flash, scale: 3, alpha: 0, duration: 300, onComplete: () => flash.destroy() });
         }
@@ -541,7 +541,7 @@ export class RaceScene extends Phaser.Scene {
         const finished = kart.completeLap(this.time.now);
         if (kart.currentLap > 0 && kart.currentLap <= TOTAL_LAPS && kart === this.playerKart) {
           this.hud.showLapFlash(kart.currentLap);
-          this.sound.play("lap");
+          this.sfx.play("lap");
           if (this.isMultiplayer) {
             this.net?.sendLapComplete(this.playerKart.lapTimes.at(-1) ?? 0);
           }
@@ -579,8 +579,8 @@ export class RaceScene extends Phaser.Scene {
         this.net?.sendRaceFinish(totalTime);
       } else {
         this.raceFinished = true;
-        this.sound.play("finish");
-        this.sound.stopEngine();
+        this.sfx.play("finish");
+        this.sfx.stopEngine();
         this.fx.celebrateFinish();
         this.hud.showRaceFinish(pos, totalTime);
       }
@@ -628,8 +628,8 @@ export class RaceScene extends Phaser.Scene {
     this.net?.destroy();
     this.ghostCars.forEach(g => g.destroy());
     this.ghostSprite?.destroy();
-    this.sound?.stopEngine();
-    this.sound?.stopMusic();
+    this.sfx?.stopEngine();
+    this.sfx?.stopMusic();
     this.fx?.destroy();
     this.touch?.destroy();
   }

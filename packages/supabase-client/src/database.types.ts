@@ -31,6 +31,7 @@ export interface Database {
           xp?: number;
           elo?: number;
         };
+        Relationships: [];
       };
       races: {
         Row: {
@@ -55,6 +56,7 @@ export interface Database {
           started_at?: string | null;
           finished_at?: string | null;
         };
+        Relationships: [];
       };
       race_results: {
         Row: {
@@ -74,6 +76,7 @@ export interface Database {
           lap_times: number[];
         };
         Update: Record<string, never>;
+        Relationships: [];
       };
       tracks: {
         Row: {
@@ -108,6 +111,7 @@ export interface Database {
           plays?: number;
           rating?: number;
         };
+        Relationships: [];
       };
       items: {
         Row: {
@@ -126,6 +130,7 @@ export interface Database {
           name?: string;
           xp_required?: number;
         };
+        Relationships: [];
       };
       room_registry: {
         Row: {
@@ -149,6 +154,7 @@ export interface Database {
           player_count?: number;
           updated_at?: string;
         };
+        Relationships: [];
       };
       skin_unlocks: {
         Row: {
@@ -162,6 +168,7 @@ export interface Database {
           skin_id: string;
         };
         Update: Record<string, never>;
+        Relationships: [];
       };
       track_ratings: {
         Row: {
@@ -179,6 +186,7 @@ export interface Database {
         Update: {
           rating?: number;
         };
+        Relationships: [];
       };
       replays: {
         Row: {
@@ -201,22 +209,10 @@ export interface Database {
           storage_url: string;
         };
         Update: Record<string, never>;
+        Relationships: [];
       };
     };
-    Views: {
-      leaderboard_monthly: {
-        Row: {
-          id: string;
-          username: string;
-          elo: number;
-          xp: number;
-          skin: string;
-          total_races: number;
-          wins: number;
-          best_time: number | null;
-        };
-      };
-    };
+    Views: Record<string, never>;
     Functions: {
       update_elo: {
         Args: { p_winner_id: string; p_loser_id: string };

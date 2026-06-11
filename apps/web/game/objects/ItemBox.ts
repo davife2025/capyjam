@@ -1,6 +1,7 @@
 import Phaser from "phaser";
-import { randomPowerUp, type PowerUpType } from "@capyjam/game-engine";
+import { randomPowerUp } from "@capyjam/game-engine";
 import type { Vec2 } from "@capyjam/game-engine";
+import type { PowerUpType } from "@capyjam/types";
 
 const PICKUP_RADIUS  = 36;
 const RESPAWN_DELAY  = 8000; // ms

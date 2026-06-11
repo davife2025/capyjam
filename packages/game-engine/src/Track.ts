@@ -1,8 +1,7 @@
-import type { TrackTile, TrackSchema } from "@capyjam/types";
+import type { TrackTile, Track as TrackTypesData } from "@capyjam/types";
 import type { SurfaceType, Vec2 } from "./Physics";
-import type { z } from "zod";
 
-export type TrackData = z.infer<typeof TrackSchema>;
+export type TrackData = TrackTypesData;
 
 export const TILE_SIZE = 64; // pixels
 

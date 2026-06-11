@@ -67,7 +67,15 @@ export async function upsertProfile(userId: string, username: string) {
   return data;
 }
 
-export async function getLeaderboard(limit = 50) {
+export interface LeaderboardEntry {
+  id:       string;
+  username: string;
+  elo:      number;
+  xp:       number;
+  skin:     string;
+}
+
+export async function getLeaderboard(limit = 50): Promise<LeaderboardEntry[]> {
   const db = getSupabaseClient();
   const { data, error } = await db
     .from("profiles")
@@ -75,7 +83,7 @@ export async function getLeaderboard(limit = 50) {
     .order("elo", { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return data;
+  return (data ?? []) as LeaderboardEntry[];
 }
 
 export async function saveRaceResult(

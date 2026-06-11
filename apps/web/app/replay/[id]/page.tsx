@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { loadReplayLocally, downloadReplay } from "@/game/replay/ReplayStorage";
 import type { ReplayData } from "@/game/replay/ReplayRecorder";
@@ -15,7 +15,6 @@ function fmt(ms: number): string {
 
 export default function ReplayPage() {
   const params    = useParams<{ id: string }>();
-  const router    = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef   = useRef<{ destroy: (b: boolean) => void } | null>(null);
 

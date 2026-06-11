@@ -18,7 +18,7 @@ export function GameCanvas({ roomId, trackId, forceGhostId }: GameCanvasProps) {
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
 
-    let game: { destroy: (removeCanvas: boolean) => void } | null = null;
+    let game: import("phaser").Game | null = null;
 
     async function initGame() {
       try {
