@@ -1,35 +1,37 @@
-app = "capyjam-server"
-primary_region = "iad"
+# fly.toml app configuration file generated for capyjam on 2026-06-11T12:05:15Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'capyjam'
+primary_region = 'ams'
 
 [build]
-  dockerfile = "apps/server/Dockerfile"
-
-[env]
-  PORT = "3001"
-  NODE_ENV = "production"
-
-[http_service]
-  internal_port = 3001
-  force_https = true
-  auto_stop_machines = "stop"
-  auto_start_machines = true
-  min_machines_running = 1
-  processes = ["app"]
-
-  [[http_service.checks]]
-    grace_period = "10s"
-    interval = "30s"
-    method = "GET"
-    timeout = "5s"
-    path = "/health"
-
-[[vm]]
-  cpu_kind = "shared"
-  cpus = 1
-  memory_mb = 512
-
-# WebSocket support — Fly proxies handle upgrade automatically
-# via http_service when the client sends Connection: Upgrade
+  dockerfile = 'apps/server/Dockerfile'
 
 [deploy]
-  strategy = "rolling"
+  strategy = 'rolling'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '3001'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/health'
+
+[[vm]]
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 512
