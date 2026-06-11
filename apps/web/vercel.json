@@ -1,0 +1,24 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=@capyjam/web",
+  "installCommand": "pnpm install",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "rootDirectory": "apps/web",
+  "regions": ["iad1"],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@capyjam_supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@capyjam_supabase_anon_key",
+    "NEXT_PUBLIC_GAME_SERVER_URL": "@capyjam_server_url",
+    "NEXT_PUBLIC_GAME_SERVER_WS_URL": "@capyjam_server_ws_url"
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ]
+}

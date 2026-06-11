@@ -1,33 +1,28 @@
-# Session 5 Diff — Track Builder + Community Tracks
+# Session 6 Diff — Polish, Audio, Mobile, Deploy
 
 Drop into capyjam/ monorepo root, merging with existing structure.
 
-## Changed files (2)
-- packages/game-engine/src/Track.ts   — added trackFromSupabaseRow() helper
-- apps/web/app/page.tsx               — homepage links to /build
+## Changed files (4)
+- apps/web/app/layout.tsx              — OG meta, footer, ownership tag comment
+- apps/web/game/scenes/RaceScene.ts    — wired SoundManager + ParticleManager + TouchControls
+- apps/web/game/objects/CapySprite.ts  — removed broken __WHITE particle dep
+- apps/web/game/hud/RaceHUD.ts         — countdown plays tick/GO sounds
 
-## New files (8)
-- apps/web/app/build/page.tsx         — builder page with Editor / Community tabs
-- apps/web/components/TrackEditor.tsx — Canvas paint editor (32×24 grid, zoom/pan, hotkeys)
-- apps/web/components/TilePalette.tsx — 9-tile palette sidebar with hotkeys 1–9
-- apps/web/components/TrackBrowser.tsx — community track grid (sort by plays or newest)
-- apps/web/lib/track-storage.ts       — draft localStorage, validation, publish, getCommunityTracks
-- apps/web/game/scenes/BuildScene.ts  — Phaser preview scene for built tracks
-- supabase/migrations/005_tracks.sql  — track_ratings, increment_track_plays(), FTS index, Realtime
-- supabase/functions/validate-track/  — server-side track validation edge function
+## New files (6)
+- apps/web/game/audio/SoundManager.ts  — 100% procedural Web Audio, no asset files
+- apps/web/game/fx/ParticleManager.ts  — exhaust, boost trail, drift sparks, confetti
+- apps/web/game/input/TouchControls.ts — virtual joystick + drift/item buttons
+- apps/web/vercel.json                 — Vercel deploy config
+- fly.toml                             — Fly.io game server config
+- SUBMISSION.md                        — full checklist + deploy steps
 
-## Track Editor features
-- 32×24 tile grid painted with mouse
-- 9 tile types: road, grass, dirt, boost, mud, finish, start, item-box, checkpoint
-- Hotkeys 1–9 to switch tiles, 0 for eraser
-- Right-click to erase
-- Scroll to zoom (50%–300%), middle-drag to pan
-- Auto-saves draft to localStorage every change
-- Client-side validation before publish
-- One-click publish to Supabase; get a race link instantly
-
-## Run migrations
+## Quick deploy
 ```bash
-supabase db push   # applies 005_tracks.sql
-supabase functions deploy validate-track
+supabase db push && supabase functions deploy rank-update validate-track
+fly launch && fly deploy
+vercel deploy --prod
 ```
+
+## Before submitting
+Edit apps/web/app/layout.tsx line with capyjam-owner meta tag:
+  <meta name="capyjam-owner" content="YOUR_CAPYJAM_USERNAME" />

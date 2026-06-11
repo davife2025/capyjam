@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import type { CapyKart } from "@capyjam/game-engine";
 import { POWER_UP_DISPLAY } from "@capyjam/game-engine";
+import { getSoundManager } from "@/game/audio/SoundManager";
 
 const PAD    = 18;
 const DEPTH  = 200;
@@ -207,6 +208,7 @@ export class RaceHUD {
       n--;
       if (n > 0) {
         this.msgText!.setText(String(n));
+        getSoundManager().play("countdown-tick");
         this.scene.tweens.add({
           targets: this.msgText,
           scaleX: { from: 1.4, to: 1 },
@@ -216,6 +218,7 @@ export class RaceHUD {
         this.scene.time.delayedCall(700, tick);
       } else {
         this.msgText!.setText("GO! 🐾").setColor("#7FDDFF");
+        getSoundManager().play("countdown-go");
         this.scene.tweens.add({
           targets: this.msgText,
           scaleX: { from: 1.5, to: 1 },
